@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="An offline reading companion for Edmund Spenser's The Faerie Queene.">
+  <title>Faerie Queene Explorer</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#reading-pane">Skip to reading pane</a>
+  <div class="site-shell">
+    <header class="masthead">
+      <a class="wordmark" href="#top" aria-label="Faerie Queene Explorer home">
+        <span class="wordmark-kicker">A reading companion</span>
+        <span class="wordmark-title">Faerie Queene<br>Explorer</span>
+      </a>
+      <div class="masthead-actions">
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Dark mode</button>
+      </div>
+    </header>
+    <main id="top" class="page-grid">
+      <aside class="sidebar" aria-label="Books and tools">
+        <p class="eyebrow">Navigate the poem</p>
+        <nav aria-label="Books">
+          <ol class="book-list">
+            <li><a class="book-link is-active" href="#reading-pane"><span>Book I</span><small>Holiness</small></a></li>
+            <li><a class="book-link" href="#toc-content"><span>Book II</span><small>Temperance</small></a></li>
+            <li><a class="book-link" href="#toc-content"><span>Book III</span><small>Chastity</small></a></li>
+            <li><a class="book-link" href="#toc-content"><span>Book IV</span><small>Friendship</small></a></li>
+            <li><a class="book-link" href="#toc-content"><span>Book V</span><small>Justice</small></a></li>
+            <li><a class="book-link" href="#toc-content"><span>Book VI</span><small>Courtesy</small></a></li>
+            <li><a class="book-link" href="#toc-content"><span>Mutabilitie</span><small>Cantos VI–VIII</small></a></li>
+          </ol>
+        </nav>
+        <details class="toc-panel" open>
+          <summary>Table of contents</summary>
+          <div id="toc-content"></div>
+        </details>
+        <section class="index-panel" aria-labelledby="character-index-title"><p class="eyebrow" id="character-index-title">Character index</p><div id="character-index"></div></section><section class="index-panel" aria-labelledby="theme-index-title"><p class="eyebrow" id="theme-index-title">Theme index</p><div id="theme-index"></div></section>
+      </aside>
+      <section class="content">
+        <div class="hero">
+          <p class="eyebrow">Edmund Spenser's</p>
+          <h1>The Faerie Queene.</h1>
+          <form class="search-form" role="search" id="search-form">
+            <label class="sr-only" for="poem-search">Search every line of the poem</label>
+            <input id="poem-search" type="search" placeholder="Search every line of the poem" autocomplete="off">
+            <button type="submit">Search</button>
+          </form>
+          <details class="advanced-search" open>
+            <summary>Search options</summary>
+            <div class="search-controls">
+              <label>Mode<select id="search-mode"><option value="normalized">Normalized spelling</option><option value="exact">Exact spelling</option><option value="regex">Regular expression</option></select></label>
+              <label>Book<select id="book-filter"><option value="">All books</option><option value="1">Book I</option><option value="2">Book II</option><option value="3">Book III</option><option value="4">Book IV</option><option value="5">Book V</option><option value="6">Book VI</option><option value="7">Mutabilitie Cantos</option></select></label>
+              <label>Canto<select id="canto-filter"><option value="">All cantos</option><option value="0">Proems</option></select></label>
+              <label>View<select id="result-view"><option value="stanza">Stanzas</option><option value="kwic">KWIC concordance</option></select></label>
+              <label>Context<select id="context-mode"><option value="line">Matching lines</option><option value="stanza" selected>Complete stanza</option><option value="adjacent">Previous and next stanza</option><option value="canto">Complete canto</option></select></label>
+              <label class="check-control"><input type="checkbox" id="whole-word" checked> Whole words</label>
+              <label class="check-control"><input type="checkbox" id="case-sensitive"> Case sensitive</label>
+            </div>
+            <p class="operator-help">Operators: <code>AND</code>, <code>OR</code>, <code>NOT</code>, and <code>NEAR/5</code>. Quoted phrases are supported.</p>
+            <div class="search-actions">
+              <button type="button" id="export-csv">Export CSV</button>
+              <button type="button" id="export-json">Export JSON</button>
+              <button type="button" id="copy-share-link">Copy search link</button>
+            </div>
+          </details>
+          <p class="search-note" id="search-note">Type a word or phrase to find it in the poem.</p>
+          <label class="history-label" for="search-history">Recent searches</label>
+          <select id="search-history"><option value="">No recent searches</option></select>
+          <form class="citation-form" id="citation-form">
+            <label for="citation-input">Citation navigation</label>
+            <input id="citation-input" type="text" placeholder="e.g. 1.1.1" autocomplete="off">
+            <button type="submit">Go</button>
+          </form>
+          <p class="shortcut-note">Shortcuts: <kbd>/</kbd> search, <kbd>D</kbd> dark mode, <kbd>Esc</kbd> clear, <kbd>?</kbd> help.</p>
+          <section class="distribution" id="distribution" aria-label="Results by book" hidden></section>
+          <section class="search-results" id="search-results" aria-live="polite" aria-label="Search results" hidden></section>
+        </div>
+        <article id="reading-pane" class="reading-pane">
+          <div class="reading-heading">
+            <div><p class="eyebrow">Begin reading</p><h2>Book I: The Legend of the Redcrosse Knight</h2></div>
+            <span class="chapter-mark">Canto I</span>
+          </div>
+          <div class="ornament" aria-hidden="true"><span>*</span></div>
+          <div class="canto-reader" id="canto-reader" aria-live="polite"></div>
+        </article>
+      </section>
+    </main>
+    <footer>
+      <span>Faerie Queene Explorer</span>
+      <p class="source-credit">Poem text from Edmund Spenser, <cite>The Faerie Queene</cite>, ed. J. C. Smith (Oxford: Clarendon Press, 1909), transcribed by <a href="https://www.gutenberg.org/ebooks/70717">Project Gutenberg eBook 70717</a> (Books I–III) and <a href="https://www.gutenberg.org/ebooks/72698">eBook 72698</a> (Books IV–VII). Search structure, normalization, themes, and interface are additions of the Faerie Queene Explorer. See <a href="SOURCE.md">source and methodology notes</a>.</p>
+    </footer>
+  </div>
+  <script src="faerie-queene-data.js"></script>
+  <script src="variants.js"></script>
+  <script src="themes.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
