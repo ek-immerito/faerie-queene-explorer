@@ -9,7 +9,9 @@
     context: $('#context-mode'), whole: $('#whole-word'), caseSensitive: $('#case-sensitive'),
     history: $('#search-history'), csv: $('#export-csv'), json: $('#export-json'), share: $('#copy-share-link'), distribution: $('#distribution'),
     citationForm: $('#citation-form'), citationInput: $('#citation-input'), theme: $('#theme-toggle'),
-    toc: $('#toc-content'), characters: $('#character-index'), themes: $('#theme-index')
+    toc: $('#toc-content'), characters: $('#character-index'), themes: $('#theme-index'),
+    audioReader: $('#audio-reader'), audioPlay: $('#audio-play'), audioPause: $('#audio-pause'),
+    audioStop: $('#audio-stop'), audioVoice: $('#audio-voice'), audioRate: $('#audio-rate'), audioStatus: $('#audio-status')
   };
   const HISTORY_KEY = 'fqe-history';
   const DARK_KEY = 'fqe-dark';
@@ -17,6 +19,8 @@
   const stanzas = new Map();
   const stanzaKeys = [];
   const variantLookup = new Map();
+  const speechAvailable = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
+  const audio = { run: 0, key: null, activeKey: null, utterance: null, map: [], word: null, paused: false };
   let current = { keys: [], query: '', compiled: null, occurrences: 0, visible: PAGE_SIZE, theme: null };
 
   lines.forEach(line => {
@@ -325,20 +329,197 @@
     setTimeout(() => { elements.share.textContent = label; }, 1400);
   }
 
+  function renderSpeechPassage(passage) {
+    let wordIndex = 0;
+    return passage.map(line => {
+      let html = '', cursor = 0;
+      for (const match of line.text.matchAll(/\S+/g)) {
+        html += escapeHtml(line.text.slice(cursor, match.index));
+        html += `<span class="speech-word" data-speech-word="${wordIndex}">${escapeHtml(match[0])}</span>`;
+        cursor = match.index + match[0].length;
+        wordIndex += 1;
+      }
+      return html + escapeHtml(line.text.slice(cursor));
+    }).join('<br>');
+  }
+
+  function speechForm(token) {
+    return token
+      .replace(/\bVna\b/gi, 'Una')
+      .replace(/\bvertue/gi, match => match[0] === 'V' ? 'Virtue' : 'virtue')
+      .replace(/Belph(?:œ|oe|o|e)be/gi, 'Belphoebe')
+      .replace(/\bFaerie\b/gi, 'Fairy');
+  }
+
+  function speechPlan(key) {
+    const tokens = stanzas.get(key).flatMap(line => [...line.text.matchAll(/\S+/g)].map(match => match[0]));
+    let text = '';
+    const map = tokens.map((token, index) => {
+      if (text) text += ' ';
+      const start = text.length;
+      text += speechForm(token);
+      return { start, end: text.length, index };
+    });
+    return { text, map };
+  }
+
+  function clearSpokenWord() {
+    if (audio.word) audio.word.classList.remove('is-speaking');
+    audio.word = null;
+    document.querySelectorAll('.reading-stanza.is-speaking-stanza').forEach(stanza => stanza.classList.remove('is-speaking-stanza'));
+  }
+
+  function setSpokenWord(charIndex) {
+    let mapped = audio.map[0];
+    for (const candidate of audio.map) {
+      if (candidate.start > charIndex) break;
+      mapped = candidate;
+    }
+    const stanza = document.getElementById(`passage-${audio.activeKey.replaceAll(':', '.')}`);
+    const word = stanza?.querySelector(`[data-speech-word="${mapped?.index}"]`);
+    if (!word || word === audio.word) return;
+    clearSpokenWord();
+    word.classList.add('is-speaking');
+    stanza.classList.add('is-speaking-stanza');
+    audio.word = word;
+  }
+
+  function updateAudioButtons(playing = false) {
+    elements.audioPlay.disabled = !speechAvailable || playing;
+    elements.audioPause.disabled = !playing;
+    elements.audioStop.disabled = !playing;
+    elements.audioPause.textContent = audio.paused ? 'Resume' : 'Pause';
+  }
+
+  function stopAudio(message = 'Stopped.') {
+    audio.run += 1;
+    if (speechAvailable) window.speechSynthesis.cancel();
+    clearSpokenWord();
+    audio.utterance = null;
+    audio.activeKey = null;
+    audio.paused = false;
+    updateAudioButtons(false);
+    if (message) elements.audioStatus.textContent = message;
+  }
+
+  function updateAudioAvailability(first, key) {
+    const isPreviewCanto = first.book === 1 && first.canto === 1;
+    elements.audioReader.hidden = !isPreviewCanto;
+    audio.key = key;
+    if (!isPreviewCanto) {
+      if (audio.utterance) stopAudio();
+      return;
+    }
+    if (!speechAvailable) {
+      elements.audioStatus.textContent = 'Audio narration is not supported by this browser.';
+      updateAudioButtons(false);
+      return;
+    }
+    if (!audio.utterance) {
+      elements.audioStatus.textContent = `Ready to listen from stanza ${first.stanza}.`;
+      updateAudioButtons(false);
+    }
+  }
+
+  function startAudio(key = audio.key) {
+    if (!speechAvailable || !stanzas.has(key)) return;
+    const first = stanzas.get(key)[0];
+    if (first.book !== 1 || first.canto !== 1) return;
+    stopAudio('');
+    const plan = speechPlan(key);
+    const utterance = new SpeechSynthesisUtterance(plan.text);
+    const selectedVoice = window.speechSynthesis.getVoices().find(voice => voice.name === elements.audioVoice.value);
+    if (selectedVoice) utterance.voice = selectedVoice;
+    utterance.rate = Number(elements.audioRate.value);
+    const run = ++audio.run;
+    audio.key = key;
+    audio.activeKey = key;
+    audio.utterance = utterance;
+    audio.map = plan.map;
+    audio.paused = false;
+    updateAudioButtons(true);
+    elements.audioStatus.textContent = `Reading stanza ${first.stanza}.`;
+    utterance.onboundary = event => {
+      if (run === audio.run && (!event.name || event.name === 'word')) setSpokenWord(event.charIndex);
+    };
+    utterance.onend = () => {
+      if (run !== audio.run) return;
+      clearSpokenWord();
+      audio.utterance = null;
+      audio.activeKey = null;
+      const index = stanzaKeys.indexOf(key);
+      const nextKey = stanzaKeys[index + 1];
+      if (nextKey && nextKey.startsWith('1:1:')) {
+        goToCitation(code(stanzas.get(nextKey)[0]));
+        startAudio(nextKey);
+      } else {
+        audio.paused = false;
+        updateAudioButtons(false);
+        elements.audioStatus.textContent = 'Canto I complete.';
+      }
+    };
+    utterance.onerror = event => {
+      if (run !== audio.run || event.error === 'canceled' || event.error === 'interrupted') return;
+      stopAudio('Narration stopped because the browser reported an audio error.');
+    };
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function pauseResumeAudio() {
+    if (!audio.utterance) return;
+    if (audio.paused) window.speechSynthesis.resume(); else window.speechSynthesis.pause();
+    audio.paused = !audio.paused;
+    updateAudioButtons(true);
+    elements.audioStatus.textContent = audio.paused ? 'Narration paused.' : `Reading stanza ${stanzas.get(audio.activeKey)[0].stanza}.`;
+  }
+
+  function populateVoices() {
+    if (!speechAvailable) return;
+    const selected = elements.audioVoice.value;
+    const voices = window.speechSynthesis.getVoices().slice().sort((a, b) => {
+      const englishDifference = Number(!a.lang.toLowerCase().startsWith('en')) - Number(!b.lang.toLowerCase().startsWith('en'));
+      return englishDifference || a.name.localeCompare(b.name);
+    });
+    elements.audioVoice.innerHTML = '<option value="">Default voice</option>' + voices.map(voice =>
+      `<option value="${escapeHtml(voice.name)}">${escapeHtml(voice.name)} (${escapeHtml(voice.lang)})</option>`
+    ).join('');
+    if ([...elements.audioVoice.options].some(option => option.value === selected)) elements.audioVoice.value = selected;
+  }
+
   function goToCitation(value, updateHash = true, scroll = true) {
     const match = value.trim().match(/^([1-7])[.:/](0|[1-9]|1[0-2])[.:/](\d+)$/);
     if (!match) { elements.note.textContent = 'Use Book.Canto.Stanza, e.g. 1.1.1.'; return; }
     const key = `${match[1]}:${match[2]}:${match[3]}`;
     if (!stanzas.has(key)) { elements.note.textContent = 'Citation not found.'; return; }
+    if (audio.utterance && audio.key !== key) stopAudio();
     const stanza = stanzas.get(key), first = stanza[0], pane = $('#reading-pane');
     const cantoKeys = stanzaKeys.filter(candidate => {
       const line = stanzas.get(candidate)[0]; return line.book === first.book && line.canto === first.canto;
     });
     pane.querySelector('.reading-heading h2').textContent = `${bookName(first.book)}: ${first.canto ? `Canto ${first.canto}` : 'Proem'}`;
     pane.querySelector('.chapter-mark').textContent = `${cantoKeys.length} stanzas`;
+    updateAudioAvailability(first, key);
+    const currentIndex = stanzaKeys.indexOf(key);
+    const adjacent = {
+      previous: currentIndex > 0 ? stanzaKeys[currentIndex - 1] : null,
+      next: currentIndex < stanzaKeys.length - 1 ? stanzaKeys[currentIndex + 1] : null,
+    };
+    Object.entries(adjacent).forEach(([direction, adjacentKey]) => {
+      document.querySelectorAll(`[data-stanza-nav="${direction}"]`).forEach(button => {
+        button.disabled = !adjacentKey;
+        if (adjacentKey) {
+          const adjacentFirst = stanzas.get(adjacentKey)[0];
+          button.dataset.go = code(adjacentFirst);
+          button.title = reference(adjacentFirst);
+        } else {
+          delete button.dataset.go;
+          button.removeAttribute('title');
+        }
+      });
+    });
     $('#canto-reader').innerHTML = cantoKeys.map(candidate => {
       const passage = stanzas.get(candidate), passageFirst = passage[0], target = candidate === key;
-      return `<section class="reading-stanza${target ? ' is-target' : ''}" id="passage-${code(passageFirst)}"><a class="stanza-number" href="#passage=${code(passageFirst)}" data-go="${code(passageFirst)}" aria-label="${reference(passageFirst)}">${passageFirst.stanza}</a><p>${passage.map(line => escapeHtml(line.text)).join('<br>')}</p></section>`;
+      return `<section class="reading-stanza${target ? ' is-target' : ''}" id="passage-${code(passageFirst)}"><a class="stanza-number" href="#passage=${code(passageFirst)}" data-go="${code(passageFirst)}" aria-label="${reference(passageFirst)}">${passageFirst.stanza}</a><p>${renderSpeechPassage(passage)}</p></section>`;
     }).join('');
     if (updateHash) history.replaceState(null, '', `#passage=${code(first)}`);
     if (scroll) $('#canto-reader .is-target').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -399,6 +580,19 @@
   elements.csv.onclick = exportCsv;
   elements.json.onclick = () => download('faerie-queene-search-results.json', JSON.stringify(exportRows(), null, 2), 'application/json');
   elements.share.onclick = copyShareLink;
+  elements.audioPlay.onclick = () => startAudio();
+  elements.audioPause.onclick = pauseResumeAudio;
+  elements.audioStop.onclick = () => stopAudio();
+  elements.audioRate.onchange = () => {
+    if (audio.utterance) {
+      const key = audio.activeKey;
+      startAudio(key);
+    }
+  };
+  if (speechAvailable) {
+    populateVoices();
+    window.speechSynthesis.onvoiceschanged = populateVoices;
+  }
 
   document.onclick = event => {
     const target = event.target.closest('[data-copy],[data-link],[data-go],[data-character],[data-theme]');
